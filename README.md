@@ -1,6 +1,6 @@
 <img width="250" height="250" alt="brotato-easy-ready" src="https://github.com/user-attachments/assets/05c5a7d9-3c72-46bf-9f74-b12aba0a7e38" />
 
-# Brotato - Easy Ready
+# Brotato: Easy Ready – Next Wave Hotkey
 
 A small quality-of-life mod for [Brotato](https://store.steampowered.com/app/1942280/Brotato/) that adds a global hotkey to ready up on the wave/shop screen — no more navigating focus over to the GO button before every wave.
 
