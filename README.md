@@ -22,3 +22,5 @@ Both bindings are configurable via the in-game ModLoader config (Mods → Easy R
 ## Installation
 
 Just hit Subscribe, and the mod will be added to your game automatically. No setup required.
+
+https://steamcommunity.com/sharedfiles/filedetails/?id=3735637438
