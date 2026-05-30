@@ -92,8 +92,10 @@ static func _make_fallback_panel() -> Panel:
 
 
 # Refreshes the hint's texture and fallback text for the given bindings,
-# based on the user's current input device (UIService.current_device).
-static func update_hint(hint: Control, scancode: int, joy_button: int) -> void:
+# rendered for the given device_type (CoopService.PlayerType). Caller decides
+# which device type to pass — UIService.current_device in single-player, or
+# the per-player input type in coop.
+static func update_hint(hint: Control, scancode: int, joy_button: int, device_type: int) -> void:
 	if hint == null:
 		return
 	var tex_rect = hint.get_node_or_null("Texture")
@@ -101,7 +103,7 @@ static func update_hint(hint: Control, scancode: int, joy_button: int) -> void:
 	if tex_rect == null or fallback == null:
 		return
 
-	var texture_path = _texture_path(scancode, joy_button)
+	var texture_path = _texture_path(scancode, joy_button, device_type)
 	if texture_path != "":
 		var tex = load(texture_path)
 		if tex != null:
@@ -116,25 +118,24 @@ static func update_hint(hint: Control, scancode: int, joy_button: int) -> void:
 	var label = fallback.get_node_or_null("Text")
 	if label == null:
 		return
-	if UIService.current_device == CoopService.PlayerType.KEYBOARD_AND_MOUSE:
+	if device_type == CoopService.PlayerType.KEYBOARD_AND_MOUSE:
 		label.text = OS.get_scancode_string(scancode)
 	else:
 		label.text = _joypad_button_name(joy_button)
 
 
-static func _texture_path(scancode: int, joy_button: int) -> String:
-	var device = UIService.current_device
-	if device == CoopService.PlayerType.KEYBOARD_AND_MOUSE:
+static func _texture_path(scancode: int, joy_button: int, device_type: int) -> String:
+	if device_type == CoopService.PlayerType.KEYBOARD_AND_MOUSE:
 		if KEYBOARD_TEXTURES.has(scancode):
 			return KEYBOARD_TEXTURES[scancode]
 		return ""
-	if device == CoopService.PlayerType.GAMEPAD_XBOX:
+	if device_type == CoopService.PlayerType.GAMEPAD_XBOX:
 		if XBOX_TEXTURES.has(joy_button):
 			return XBOX_TEXTURES[joy_button]
-	elif device == CoopService.PlayerType.GAMEPAD_PLAYSTATION:
+	elif device_type == CoopService.PlayerType.GAMEPAD_PLAYSTATION:
 		if PS_TEXTURES.has(joy_button):
 			return PS_TEXTURES[joy_button]
-	elif device == CoopService.PlayerType.GAMEPAD_SWITCH:
+	elif device_type == CoopService.PlayerType.GAMEPAD_SWITCH:
 		if SWITCH_TEXTURES.has(joy_button):
 			return SWITCH_TEXTURES[joy_button]
 	return ""
