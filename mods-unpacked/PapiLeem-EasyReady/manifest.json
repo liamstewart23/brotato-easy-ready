@@ -1,0 +1,41 @@
+{
+	"name": "EasyReady",
+	"namespace": "PapiLeem",
+	"version_number": "1.0.0",
+	"description": "Adds a global hotkey (keyboard + controller) to ready up on the wave/shop screen without having to move focus to the GO button.",
+	"website_url": "",
+	"dependencies": [],
+	"extra": {
+		"godot": {
+			"incompatibilities": [],
+			"optional_dependencies": [],
+			"authors": [
+				"PapiLeem"
+			],
+			"compatible_mod_loader_version": ["6.2.0"],
+			"compatible_game_version": ["1.1.13.1"],
+			"config_schema": {
+				"type": "object",
+				"properties": {
+					"keyboard_scancode": {
+						"type": "integer",
+						"title": "Keyboard Hotkey (Godot scancode)",
+						"description": "Godot KEY_* scancode for the ready hotkey. Default 71 = G (bundled icon).",
+						"default": 71,
+						"minimum": 0,
+						"maximum": 16777300
+					},
+					"joypad_button_index": {
+						"type": "integer",
+						"title": "Controller Hotkey (joypad button index)",
+						"description": "Joypad button index. Default 10 = Back (Xbox) / Share (PS) / - (Switch) — bundled icons, no conflict with existing shop actions.",
+						"default": 10,
+						"minimum": 0,
+						"maximum": 31
+					}
+				}
+			},
+			"tags": ["QoL"]
+		}
+	}
+}
