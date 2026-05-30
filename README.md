@@ -13,8 +13,6 @@ Press the hotkey anywhere on the shop screen and the wave starts immediately, ex
 
 <img width="394" height="87" alt="Screenshot 2026-05-30 120501" src="https://github.com/user-attachments/assets/0956741b-7356-4823-a9a6-0d91d0cea899" />
 
-Both bindings are configurable via the in-game ModLoader config (Mods → Easy Ready), with `keyboard_scancode` and `joypad_button_index` fields.
-
 ## Features
 
 - **Visual hint on the GO button** — Styled like the lock button's E-key glyph (dark cap, gray interior, white letter/symbol). Mirrors Brotato's own UI aesthetic.
