@@ -11,6 +11,8 @@ Press the hotkey anywhere on the shop screen and the wave starts immediately, ex
 - **Keyboard:** `G` — chosen because nothing else in Brotato uses it.
 - **Controller:** the **View** button on Xbox / **Share/Create** button on PlayStation / **−** button on Switch.
 
+<img width="394" height="87" alt="Screenshot 2026-05-30 120501" src="https://github.com/user-attachments/assets/0956741b-7356-4823-a9a6-0d91d0cea899" />
+
 Both bindings are configurable via the in-game ModLoader config (Mods → Easy Ready), with `keyboard_scancode` and `joypad_button_index` fields.
 
 ## Features
