@@ -3,6 +3,9 @@ extends Node
 const MOD_DIR = "PapiLeem-EasyReady"
 const MOD_LOG = "PapiLeem-EasyReady"
 const ACTION_NAME = "easy_ready"
+# Seconds the player must hold the hotkey before ready-up fires. Matches
+# CoopService.HOLD_DURATION (the coop-join hold-to-confirm duration).
+const HOLD_DURATION = 0.7
 
 const ShopDetector = preload("res://mods-unpacked/PapiLeem-EasyReady/scripts/shop_detector.gd")
 const HintView = preload("res://mods-unpacked/PapiLeem-EasyReady/scripts/hint_view.gd")
@@ -12,9 +15,13 @@ var _joy_button: int = 10
 
 var _active_shops = []
 
-# Polling state — edge-detect raw input every frame in _process.
-var _key_was_down: bool = false
-var _joy_was_down: Dictionary = {}
+# Hold-to-confirm state. Each input source accumulates time while held;
+# completion fires _on_GoButton_pressed once, then waits for release before
+# it can fire again.
+var _key_hold_time: float = 0.0
+var _key_fired: bool = false
+var _joy_hold_times: Dictionary = {}    # device → float
+var _joy_fired: Dictionary = {}         # device → bool
 
 
 func _init():
@@ -93,7 +100,7 @@ func _setup_shop(shop) -> void:
 		var go_button = shop._get_go_button(player_index)
 		if go_button == null or go_button.has_node(HintView.HINT_NODE_NAME):
 			continue
-		var hint = HintView.make_hint()
+		var hint = HintView.make_hint(player_index)
 		go_button.add_child(hint)
 		HintView.update_hint(hint, _key_scancode, _joy_button, _device_type_for_player(player_index))
 
@@ -122,84 +129,158 @@ func _get_current_shop():
 	return null
 
 
-# ─── polling-based hotkey detection ─────────────────────────────────────
-# Queries Input.is_key_pressed / Input.is_joy_button_pressed directly to
-# bypass Godot's event dispatch. The event-driven path turned out to be
-# unreliable for our custom action in coop (G key never reached _input),
-# probably due to InputMap action variants registered by Brotato's
-# coop-debug mode. Polling sidesteps the whole question.
+# ─── hold-to-confirm polling ────────────────────────────────────────────
+# Polls Input.is_key_pressed / Input.is_joy_button_pressed each frame and
+# accumulates hold time per input source. At HOLD_DURATION the action fires
+# once; on release, the timer resets so the next hold can fire again. The
+# progress disc on the GO button fills in real time. Mirrors Brotato's
+# coop-join hold-to-confirm pattern (see coop_service.gd:114-122).
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	var shop = _get_current_shop()
 	if shop == null:
-		# Clear edge-state so a key held across scene transitions doesn't
-		# fire on re-entry.
-		_key_was_down = false
-		_joy_was_down.clear()
+		# Clear hold state so a key held across scene transitions doesn't
+		# accumulate or fire on re-entry.
+		_key_hold_time = 0.0
+		_key_fired = false
+		_joy_hold_times.clear()
+		_joy_fired.clear()
 		return
 	if get_tree().paused:
 		return
 
-	# Keyboard — one keyboard, polled by scancode.
-	var key_down = Input.is_key_pressed(_key_scancode)
-	if key_down and not _key_was_down:
-		_fire_for_keyboard(shop)
-	_key_was_down = key_down
+	_tick_keyboard(shop, delta)
+	_tick_joypads(shop, delta)
 
-	# Joypad — poll each connected device for the bound button.
+
+func _tick_keyboard(shop, delta: float) -> void:
+	if Input.is_key_pressed(_key_scancode):
+		_key_hold_time += delta
+		var progress01 = _key_hold_time / HOLD_DURATION
+		if progress01 > 1.0:
+			progress01 = 1.0
+		_update_keyboard_progress(shop, progress01)
+		if _key_hold_time >= HOLD_DURATION and not _key_fired:
+			_key_fired = true
+			_fire_for_keyboard(shop)
+	else:
+		if _key_hold_time > 0.0 or _key_fired:
+			_key_hold_time = 0.0
+			_key_fired = false
+			_update_keyboard_progress(shop, 0.0)
+
+
+func _tick_joypads(shop, delta: float) -> void:
 	var connected = Input.get_connected_joypads()
 	for device in connected:
 		var down = Input.is_joy_button_pressed(device, _joy_button)
-		var was = false
-		if _joy_was_down.has(device):
-			was = _joy_was_down[device]
-		if down and not was:
-			_fire_for_joypad(shop, device)
-		_joy_was_down[device] = down
-
-	# Drop tracking entries for disconnected devices so they re-edge cleanly
-	# if reconnected.
+		var t = 0.0
+		if _joy_hold_times.has(device):
+			t = _joy_hold_times[device]
+		var fired = false
+		if _joy_fired.has(device):
+			fired = _joy_fired[device]
+		if down:
+			t += delta
+			_joy_hold_times[device] = t
+			var progress01 = t / HOLD_DURATION
+			if progress01 > 1.0:
+				progress01 = 1.0
+			_update_joypad_progress(shop, device, progress01)
+			if t >= HOLD_DURATION and not fired:
+				_joy_fired[device] = true
+				_fire_for_joypad(shop, device)
+		else:
+			if t > 0.0 or fired:
+				_joy_hold_times[device] = 0.0
+				_joy_fired[device] = false
+				_update_joypad_progress(shop, device, 0.0)
+	# Drop entries for disconnected devices so they re-arm cleanly if
+	# reconnected.
 	var stale = []
-	for known_device in _joy_was_down.keys():
-		if not (known_device in connected):
-			stale.append(known_device)
+	for known in _joy_hold_times.keys():
+		if not (known in connected):
+			stale.append(known)
 	for d in stale:
-		_joy_was_down.erase(d)
+		_joy_hold_times.erase(d)
+		_joy_fired.erase(d)
+
+
+# ─── routing ────────────────────────────────────────────────────────────
+
+func _keyboard_player_index() -> int:
+	if not RunData.is_coop_run:
+		return 0
+	for i in RunData.get_player_count():
+		if CoopService.get_player_input_type(i) == CoopService.PlayerType.KEYBOARD_AND_MOUSE:
+			return i
+	return -1
+
+
+func _joypad_player_index(device: int) -> int:
+	if not RunData.is_coop_run:
+		return 0
+	for i in RunData.get_player_count():
+		var t = CoopService.get_player_input_type(i)
+		if t == CoopService.PlayerType.KEYBOARD_AND_MOUSE:
+			continue
+		var remapped = CoopService.get_remapped_player_device(i)
+		var expected = remapped
+		if remapped == CoopService.GAMEPAD_REMAPPED_DEVICE_ID:
+			expected = 0
+		if device == expected:
+			return i
+	return -1
 
 
 func _fire_for_keyboard(shop) -> void:
-	var player_index = 0
-	if RunData.is_coop_run:
-		player_index = -1
-		for i in RunData.get_player_count():
-			if CoopService.get_player_input_type(i) == CoopService.PlayerType.KEYBOARD_AND_MOUSE:
-				player_index = i
-				break
-		if player_index < 0:
-			return
-	if shop.has_method("_on_GoButton_pressed"):
-		shop._on_GoButton_pressed(player_index)
+	_fire_ready(shop, _keyboard_player_index())
 
 
 func _fire_for_joypad(shop, device: int) -> void:
-	var player_index = 0
-	if RunData.is_coop_run:
-		player_index = -1
-		for i in RunData.get_player_count():
-			var t = CoopService.get_player_input_type(i)
-			if t == CoopService.PlayerType.KEYBOARD_AND_MOUSE:
-				continue
-			var remapped = CoopService.get_remapped_player_device(i)
-			var expected = remapped
-			if remapped == CoopService.GAMEPAD_REMAPPED_DEVICE_ID:
-				expected = 0
-			if device == expected:
-				player_index = i
-				break
-		if player_index < 0:
-			return
-	if shop.has_method("_on_GoButton_pressed"):
-		shop._on_GoButton_pressed(player_index)
+	_fire_ready(shop, _joypad_player_index(device))
+
+
+# Fires ready-up for the given player, then focuses their GO button. The
+# GO button has a focus_exited signal wired to _clear_go_button_pressed
+# (base_shop.gd:349) — so as soon as the player navigates away with
+# arrow keys / D-pad, the ready state auto-cancels. Matches the UX of
+# clicking the GO button directly.
+func _fire_ready(shop, player_index: int) -> void:
+	if player_index < 0:
+		return
+	if not shop.has_method("_on_GoButton_pressed"):
+		return
+	shop._on_GoButton_pressed(player_index)
+	if shop.has_method("_get_go_button"):
+		var go_button = shop._get_go_button(player_index)
+		if go_button != null:
+			Utils.focus_player_control(go_button, player_index)
+
+
+func _update_keyboard_progress(shop, progress01: float) -> void:
+	var player_index = _keyboard_player_index()
+	if player_index < 0:
+		return
+	_set_player_hint_progress(shop, player_index, progress01)
+
+
+func _update_joypad_progress(shop, device: int, progress01: float) -> void:
+	var player_index = _joypad_player_index(device)
+	if player_index < 0:
+		return
+	_set_player_hint_progress(shop, player_index, progress01)
+
+
+func _set_player_hint_progress(shop, player_index: int, progress01: float) -> void:
+	if not shop.has_method("_get_go_button"):
+		return
+	var go_button = shop._get_go_button(player_index)
+	if go_button == null:
+		return
+	var hint = go_button.get_node_or_null(HintView.HINT_NODE_NAME)
+	if hint != null:
+		HintView.set_progress(hint, progress01)
 
 
 # ─── helpers ────────────────────────────────────────────────────────────

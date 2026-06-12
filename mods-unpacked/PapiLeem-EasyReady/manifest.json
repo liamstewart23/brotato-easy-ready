@@ -1,7 +1,7 @@
 {
 	"name": "EasyReady",
 	"namespace": "PapiLeem",
-	"version_number": "1.0.0",
+	"version_number": "1.1.0",
 	"description": "Adds a global hotkey (keyboard + controller) to ready up on the wave/shop screen without having to move focus to the GO button.",
 	"website_url": "",
 	"dependencies": [],
